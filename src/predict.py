@@ -50,7 +50,7 @@ from tensorflow.keras.models import load_model
 from scipy.sparse import csc_matrix
 import tensorflow as tf
 import hdbscan
-from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+from gensim.models.doc2vec import Doc2Vec
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
@@ -138,7 +138,7 @@ class TaxonClassifier:
                 logging.info(f"  - Successfully loaded '{self.name}' model.")
             return True
         except Exception as e:
-            logging.error(f"Error loading {self.name} model: {e}", file=sys.stderr)
+            logging.error(f"Error loading {self.name} model: {e}")
             return False
 
     def predict(self, sequence: str, confidence_threshold: float = 0.8) -> tuple[str, float]:
@@ -194,6 +194,12 @@ def explorer_step_1_vectorize(sequences: list) -> np.ndarray:
     """
     Vectorizes unclassified sequences using a pre-trained Doc2Vec model.
 
+    These are, by definition, sequences the Filter models couldn't classify,
+    so their IDs were never part of the Doc2Vec model's training corpus.
+    infer_vector() is the correct API for embedding genuinely new documents
+    with a trained Doc2Vec model (looking them up via model.dv[...] only
+    works for documents that were actually present at training time).
+
     Args:
         sequences (list): A list of Bio.SeqRecord objects.
 
@@ -202,22 +208,18 @@ def explorer_step_1_vectorize(sequences: list) -> np.ndarray:
     """
     KMER_SIZE = 6
     doc2vec_model_path = MODELS_DIR / "explorer_doc2vec.model"
-    
+
     if not doc2vec_model_path.exists():
         return np.array([])
-    
+
     doc2vec_model = Doc2Vec.load(str(doc2vec_model_path))
-    
-    corpus = [
-        TaggedDocument(
-            words=sequence_to_kmers(str(s.seq), 6),
-            tags=[s.id]
-        ) for s in sequences
-    ]
-    
-    sequence_vectors = np.array([doc2vec_model.dv[seq.id] for seq in sequences])
+
+    sequence_vectors = np.array([
+        doc2vec_model.infer_vector(sequence_to_kmers(str(s.seq), KMER_SIZE))
+        for s in sequences
+    ])
     sequence_vectors = normalize(sequence_vectors)
-    
+
     return sequence_vectors
 
 def explorer_step_2_cluster(sequence_vectors: np.ndarray) -> np.ndarray:
@@ -413,13 +415,25 @@ def run_analysis(input_fasta_path: Path, report_name: str = None, verbose: bool 
         if verbose:
             logging.info(f"\n[SUCCESS] Analysis complete. Report saved to: {report_path}")
     except Exception as e:
-        logging.error(f"\n[ERROR] Failed to save report file: {e}", file=sys.stderr)
+        logging.error(f"\n[ERROR] Failed to save report file: {e}")
     
     return {
         "status": "success",
         "report_content": final_report_text.strip(),
         "classified_results": {k: v for k, v in classified_results.items()},
     }
+
+# --- ASCII Art Header for "ATLAS" (matches cli/__main__.py) ---
+ATLAS_ASCII = r"""
+    _  _____ _        _    ____
+   / \|_   _| |      / \  / ___|
+  / _ \ | | | |     / _ \ \___ \
+ / ___ \| | | |___ / ___ \ ___) |
+/_/   \_\_| |_____/_/   \_\____/
+
+ A.T.L.A.S. Command-Line Interface
+---------------------------------------
+"""
 
 # =============================================================================
 # --- Main Execution Block (for CLI) ---

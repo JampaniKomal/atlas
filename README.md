@@ -42,11 +42,17 @@ This project supports both GPU-accelerated and CPU-only workflows. Please follow
 
 ### 2. Data Acquisition
 
-The ATLAS pipelines rely on large, public reference databases that are not included in this repository. You must download them manually. The required files are listed in the [16S Pipeline Workflow](docs/03_Pipeline_16S_Workflow.md). Place all downloaded files in the `data/raw/` directory.
+The ATLAS pipelines rely on large, public reference databases (e.g. SILVA
+for 16S) that are not included in this repository. You must download them
+manually and place them in `data/raw/`. See the [16S Pipeline Workflow](docs/03_Pipeline_16S_Workflow.md)
+for the expected input file for that marker.
 
-### 3. Running a Pipeline
+### 3. Training a Pipeline
 
-Once your environment is configured and the data is in place, you can run any of the processing pipelines. Each pipeline consists of a two-step script-based workflow. For example, to run the 16S pipeline:
+Once your environment is configured and the data is in place, you can train
+any of the four marker classifiers (16S, 18S, COI, ITS). Each pipeline
+consists of a two-step script-based workflow. For example, to train the 16S
+classifier:
 
 ```bash
 # First, run the data preparation script
@@ -56,27 +62,123 @@ python src/pipeline_16s/01_prepare_data.py
 python src/pipeline_16s/02_train_model.py
 ```
 
-For detailed workflow instructions for each pipeline, please refer to the documentation in the [docs](docs/) directory.
+Repeat for `pipeline_18s`, `pipeline_coi`, and `pipeline_its` to train the
+remaining Filter models, and see `src/pipeline_explorer/` for the Doc2Vec +
+HDBSCAN pipeline used to cluster sequences none of the Filter models can
+classify.
+
+### 4. Running an Analysis
+
+Once at least one marker's model artifacts exist under `models/`, analyze a
+FASTA file with the CLI:
+
+```bash
+python -m cli --input_fasta path/to/your/file.fasta
+```
+
+Or run it with no arguments for an interactive prompt. Add `--verbose` to
+see per-stage progress, and `--report-name <name>` to control the saved
+report's filename (reports are written to `reports/`).
+
+For detailed workflow instructions for each pipeline, please refer to the
+documentation in the [docs](docs/) directory.
 
 ## Documentation
 
-The project includes comprehensive documentation in the `docs/` directory:
+The project includes documentation in the `docs/` directory:
 
 1. [Project Overview](docs/01_Project_Overview.md) - Scientific background and project goals
 2. [Environment and Installation Guide](docs/02_Environment_and_Installation.md) - Setup instructions
-3. [16S Pipeline Workflow](docs/03_Pipeline_16S_Workflow.md) - 16S rRNA gene analysis pipeline
-4. [18S Pipeline Workflow](docs/04_Pipeline_18S_Workflow.md) - 18S rRNA gene analysis pipeline
-5. [COI Pipeline Workflow](docs/05_Pipeline_COI_Workflow.md) - Cytochrome c oxidase subunit I analysis pipeline
-6. [Performance Evaluation](docs/06_Performance_Evaluation.md) - Model performance metrics and benchmarks
-7. [Troubleshooting and FAQ](docs/07_Troubleshooting_and_FAQ.md) - Common issues and solutions
+3. [16S Pipeline Workflow](docs/03_Pipeline_16S_Workflow.md) - Step-by-step 16S (prokaryote) data preparation workflow
+4. [16S Development Log](docs/04_Development_Log_16S.md) - Strategic decisions and technical challenges, 16S
+5. [18S Development Log](docs/05_Development_Log_18S.md) - Strategic decisions and technical challenges, 18S (eukaryote)
+6. [COI Development Log](docs/06_Development_Log_COI.md) - Strategic decisions and technical challenges, COI (animalia)
+7. [ITS Development Log](docs/07_Development_Log_ITS.md) - Strategic decisions and technical challenges, ITS (fungi)
+
+Only the 16S pipeline has a dedicated step-by-step workflow doc; 18S/COI/ITS
+are documented as development logs (decisions and challenges) rather than
+workflow guides, since all four pipelines follow the same overall shape
+(prepare data -> train model) described in `src/pipeline_<marker>/`.
 
 ## Project Structure
 
-The project is organized into a clean, modular structure:
+- **`cli/`**: The interactive command-line entry point (`python -m cli`).
+- **`src/`**: Production Python scripts — `predict.py` (the master analysis
+  engine used by the CLI), and one `pipeline_<marker>/` folder per genetic
+  marker (16S, 18S, COI, ITS) plus `pipeline_explorer/` for the novel-taxa
+  clustering pipeline.
+- **`docs/`**: Project documentation and per-marker development logs.
+- **`others/`**: Standalone utility scripts (e.g. generating a small test
+  FASTA file from a full reference database).
+- **`data/`** and **`models/`**: Not included in the repo (gitignored —
+  reference databases and trained model artifacts are too large to commit).
+  Created locally when you download the reference data and run a pipeline's
+  training scripts.
 
-- **`/data/`**: Holds the raw and processed datasets.
-- **`/docs/`**: Contains all project documentation, development logs, and guides.
-- **`/models/`**: Stores the final trained models (`.keras`) and data encoders (`.pkl`).
-- **`/notebooks/`**: Contains the Jupyter Notebooks used for the interactive development and refinement of each pipeline.
-- **`/src/`**: Contains the final, production-ready Python (`.py`) scripts for each pipeline.
+## Testing & Verification
+
+Model artifacts (the trained `.keras` classifiers and Doc2Vec model) aren't
+included in the repo and require downloading large reference databases to
+train, so full end-to-end classification wasn't runnable in this pass.
+Instead, verified the pipeline logic directly against real, controlled
+inputs, which surfaced 3 real bugs:
+
+- **The "Explorer" (novel taxa discovery) pipeline crashed on every
+  genuinely novel sequence.** `explorer_step_1_vectorize()` looked up
+  vectors via `doc2vec_model.dv[seq.id]`, which only works for sequence IDs
+  that were part of the Doc2Vec model's *training* corpus — copied from the
+  training script (`pipeline_explorer/01_vectorize_sequences.py`), where
+  that assumption is correct, into the inference-time code, where it isn't:
+  every sequence reaching this stage is by definition one the Filter models
+  couldn't classify, so its ID was never seen during training. Reproduced
+  with a real trained Doc2Vec model and a real `KeyError` on a novel ID,
+  then fixed by switching to `doc2vec_model.infer_vector()` (the correct
+  Doc2Vec API for embedding unseen documents) and re-verified the same
+  scenario now vectorizes, clusters, and reports correctly.
+- **`src/predict.py`'s own CLI entry point crashed immediately in
+  interactive mode** with `NameError: name 'ATLAS_ASCII' is not defined` —
+  the constant is defined in `cli/__main__.py` but `predict.py` has its own
+  duplicate `__main__` block that references it without defining it.
+  Fixed by defining it in `predict.py` too.
+- **A model-loading failure would crash instead of logging cleanly**:
+  `logging.error(..., file=sys.stderr)` — `file=` isn't a valid keyword for
+  the `logging` module (it's a `print()` kwarg) — so any real error loading
+  a model's artifacts raised a `TypeError` instead of the intended clean
+  error message. Fixed at both call sites.
+
+Also fixed `others/create_test_fasta.py`, which had the original
+developer's own machine-specific absolute paths (`C:\Users\...\Music\atlas\...`)
+hardcoded — non-portable for anyone else running it. Now resolves paths
+relative to the project root like every other script in the repo.
+
+## Known Limitations
+
+- `index.html` is a full web UI (file upload, live charts, results screen)
+  left over from an earlier architecture — it expects a `POST /run_analysis`
+  backend that was deliberately removed (`server.py`) in favor of the CLI.
+  It is not linked from anywhere (no GitHub Pages) and does not work as
+  committed; **the CLI (`python -m cli`) is the actual supported interface.**
+- The "Explorer" pipeline's clustering quality depends heavily on how well
+  the pre-trained Doc2Vec model generalizes to genuinely novel sequences via
+  `infer_vector()` — this is inherently approximate compared to vectors for
+  documents seen during training.
+- No automated test suite; verification here was done with standalone
+  scripts exercising the real pipeline functions with synthetic/controlled
+  data, not a committed `tests/` directory.
+- GPU support requires a specific CUDA Toolkit/cuDNN version pinned to
+  TensorFlow 2.10 (see the Environment and Installation Guide); newer GPU
+  drivers may need a different pinned combination.
+
+## Contributors
+
+- **Jampani Komal** — primary development (data pipelines, CLI, Filter and
+  Explorer pipelines).
+- **Rishu Tiwari** — model training improvements: reduced Adam learning
+  rate and increased EarlyStopping patience on the 16S/18S/ITS classifiers,
+  and rewrote COI's data preparation to use `HashingVectorizer` with a
+  generator-based k-mer workflow for better performance on large datasets.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 

@@ -5,6 +5,7 @@ Script to create a 0.1MB test FASTA file from the SILVA database.
 
 import os
 import sys
+from pathlib import Path
 
 def create_test_fasta(input_file, output_file, target_size_mb=0.1):
     """
@@ -79,12 +80,13 @@ def create_test_fasta(input_file, output_file, target_size_mb=0.1):
     return True
 
 def main():
-    # Define file paths
-    input_file = r"C:\Users\jampa\Music\atlas\data\raw\SILVA_138.1_SSURef_NR99_tax_silva.fasta"
-    output_file = r"C:\Users\jampa\Music\atlas\data\processed\silva_test_0.1mb.fasta"
-    
+    # Define file paths, relative to the project root (this script lives in others/)
+    project_root = Path(__file__).parent.parent
+    input_file = project_root / "data" / "raw" / "SILVA_138.1_SSURef_NR99_tax_silva.fasta"
+    output_file = project_root / "data" / "processed" / "silva_test_0.1mb.fasta"
+
     # Create processed directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Check if input file exists
     if not os.path.exists(input_file):
@@ -95,10 +97,10 @@ def main():
     success = create_test_fasta(input_file, output_file, target_size_mb=0.1)
     
     if success:
-        print(f"\n✅ Successfully created 0.1MB test FASTA file!")
+        print(f"\nSuccessfully created 0.1MB test FASTA file!")
         print(f"Location: {output_file}")
     else:
-        print("❌ Failed to create test file!")
+        print("Failed to create test file!")
         sys.exit(1)
 
 if __name__ == "__main__":

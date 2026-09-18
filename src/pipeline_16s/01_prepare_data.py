@@ -166,6 +166,6 @@ if __name__ == "__main__":
         pickle.dump(vectorizer, f)
     with open(MODELS_DIR / "16s_genus_label_encoder.pkl", 'wb') as f:
         pickle.dump(label_encoder, f)
-    print("✅ All artifacts saved successfully.")
+    print("All artifacts saved successfully.")
     print("\n--- DATA PREPARATION COMPLETE ---")
 

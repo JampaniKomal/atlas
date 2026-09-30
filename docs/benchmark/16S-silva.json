@@ -1,0 +1,66 @@
+{
+  "known_classes": 2427,
+  "held_out_classes": 50,
+  "known_test_sequences": 6739,
+  "novel_sequences": 941,
+  "closed_set_accuracy": 0.9206,
+  "closed_set_macro_f1": 0.9153,
+  "threshold": 0.526,
+  "known_coverage": 0.954,
+  "known_precision": 0.9485,
+  "novel_rejected": 0.3135,
+  "novel_clustered": 0.8983,
+  "explorer_clusters": 29,
+  "explorer_ari": 0.9048,
+  "explorer_homogeneity": 0.957,
+  "held_out_recovered": 0.5,
+  "clusters_flagged_novel": 0.1034,
+  "unclustered": 30,
+  "novelty_auroc": 0.8605,
+  "epochs": 35,
+  "train_seconds": 618.0,
+  "threshold_sweep": [
+    {
+      "threshold": 0.5,
+      "known_coverage": 0.9617,
+      "known_precision": 0.9445,
+      "novel_rejected": 0.2837
+    },
+    {
+      "threshold": 0.6,
+      "known_coverage": 0.9337,
+      "known_precision": 0.9584,
+      "novel_rejected": 0.3985
+    },
+    {
+      "threshold": 0.7,
+      "known_coverage": 0.9028,
+      "known_precision": 0.9678,
+      "novel_rejected": 0.5112
+    },
+    {
+      "threshold": 0.8,
+      "known_coverage": 0.8654,
+      "known_precision": 0.9762,
+      "novel_rejected": 0.6227
+    },
+    {
+      "threshold": 0.9,
+      "known_coverage": 0.8108,
+      "known_precision": 0.9865,
+      "novel_rejected": 0.7343
+    },
+    {
+      "threshold": 0.95,
+      "known_coverage": 0.7626,
+      "known_precision": 0.9905,
+      "novel_rejected": 0.8045
+    },
+    {
+      "threshold": 0.99,
+      "known_coverage": 0.631,
+      "known_precision": 0.9962,
+      "novel_rejected": 0.9203
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "known_classes": 2427,
+  "held_out_classes": 50,
+  "known_test_sequences": 6739,
+  "novel_sequences": 941,
+  "closed_set_accuracy": 0.9147,
+  "closed_set_macro_f1": 0.9109,
+  "threshold": 0.5437,
+  "known_coverage": 0.9509,
+  "known_precision": 0.9435,
+  "novel_rejected": 0.3305,
+  "novel_clustered": 0.9293,
+  "explorer_clusters": 36,
+  "explorer_ari": 0.9038,
+  "explorer_homogeneity": 0.9722,
+  "held_out_recovered": 0.62,
+  "clusters_flagged_novel": 0.0833,
+  "unclustered": 22,
+  "train_seconds": 3346.7
+}

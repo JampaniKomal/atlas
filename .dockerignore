@@ -1,0 +1,8 @@
+.git
+benchmark-data
+atlas-demo
+models
+reports
+**/__pycache__
+.pytest_cache
+.ruff_cache

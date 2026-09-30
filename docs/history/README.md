@@ -8,8 +8,11 @@ longer early-stopping patience) and the problems solved along the way (GPU
 setup for TensorFlow 2.10, VRAM exhaustion, stratification errors).
 
 ATLAS v2 replaced the per-marker scripts with one package and command (see
-the main [README](../../README.md)), but kept those decisions. The notebooks
-and scripts these logs refer to are in the repository history.
+the main [README](../../README.md)) and kept those decisions, except the
+learning rate: on the full SILVA and PR2 references 1e-3 trains five times
+faster than 1e-4 with slightly better accuracy (see
+[BENCHMARK.md](../BENCHMARK.md#learning-rate)). The notebooks and scripts
+these logs refer to are in the repository history.
 
 - [Project overview (v1)](v1-project-overview.md)
 - [16S data preparation workflow](v1-16S-workflow.md)

@@ -1,184 +1,224 @@
 # ATLAS: Artificial Taxonomic Learning & Analysis System
 
-This repository contains the official codebase for the ATLAS project, an AI-driven software suite for taxonomic identification and biodiversity assessment from environmental DNA (eDNA).
+[![CI](https://github.com/JampaniKomal/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/JampaniKomal/atlas/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## About This Repository
-This repository implements an AI-driven pipeline that minimizes reliance on reference databases, reduces computational time, and enables the discovery of novel taxa and ecological insights in deep-sea environments.
+**Taxonomy and biodiversity from environmental DNA, including the organisms
+your reference database has never seen.**
 
-## Project Mission
+ATLAS reads a FASTA file of eDNA sequences (16S, 18S, COI or ITS) and:
 
-The goal of ATLAS is to address a critical challenge in modern biodiversity research: the "database gap." Standard reference databases are often incomplete, especially for organisms from unique biomes like the deep sea. ATLAS is an AI-driven pipeline that minimizes reliance on these databases, reduces computational time, and enables the discovery of novel taxa from raw eDNA reads.
+1. **Filter**: classifies each sequence to genus with a deep-learning model
+   per marker gene, and keeps only predictions above a confidence threshold
+   calibrated for 95% precision;
+2. **Explorer**: clusters the sequences no model is sure about (HDBSCAN over
+   k-mer composition), and flags clusters that are farther from every known
+   genus than known sequences are from their own: candidate novel lineages;
+3. **Biodiversity**: estimates abundance and alpha diversity (observed units,
+   Chao1, Shannon, Gini-Simpson, Pielou) over classified genera and Explorer
+   clusters together;
+4. reports it as text, JSON and a standalone HTML page, from the command line
+   or a local web interface.
 
-For a detailed overview of the project's scientific background and long-term goals, please see the [Project Overview](docs/01_Project_Overview.md) document.
+Built for Smart India Hackathon 2025, problem statement **SIH25042**:
+*Identifying taxonomy and assessing biodiversity from eDNA datasets*, posed by
+the Centre for Marine Living Resources and Ecology (CMLRE).
 
-## Problem Statement & Context
+## The problem
 
-**Problem Statement ID:** ID25042  
-**Problem Statement Title:** Identifying Taxonomy and Assessing Biodiversity from eDNA Datasets
+Deep-sea sediment and water samples carry DNA from organisms nobody has
+sequenced before. Standard pipelines (QIIME 2, DADA2, mothur) assign reads by
+aligning them to reference databases such as SILVA, PR2 or NCBI, which are
+dominated by well-studied terrestrial and shallow-water species. Deep-sea
+reads end up misclassified, dropped as "unassigned", or forced into the
+nearest known genus, and biodiversity is underestimated.
 
-### Description
+ATLAS treats that gap as a first-class output. A classifier trained on the
+reference handles what it knows. Anything it isn't confident about goes to
+unsupervised clustering instead of being discarded or forced into a label, so
+an unknown lineage shows up as a cluster with a representative sequence to
+investigate.
 
-The deep ocean, encompassing vast and remote ecosystems like abyssal plains, hydrothermal vents, and seamounts, harbors a significant portion of global biodiversity, much of which remains undiscovered due to its inaccessibility. Understanding deep-sea biodiversity is critical for elucidating ecological interactions (e.g., food webs, nutrient cycling), informing conservation strategies for vulnerable marine habitats, and identifying novel eukaryotic species with potential biotechnological or ecological significance.
+## How it works
 
-Environmental DNA (eDNA) has emerged as a powerful, non-invasive tool for studying these ecosystems by capturing genetic traces of organisms from environmental samples, such as seawater or sediment, without the need for physical collection or disturbance of fragile habitats. By targeting marker genes like 18S rRNA or COI, eDNA enables the detection of diverse eukaryotic taxa, including protists, cnidarians, and rare metazoans, offering insights into species richness and community structure.
-
-The Centre for Marine Living Resources and Ecology (CMLRE) will undertake routine voyages to the deep sea and collect sediment and water samples from hotspot regions for biodiversity assessment and ecosystem monitoring. The water and sediment samples will be used to extract eDNA and will be subject to high-throughput sequencing.
-
-However, assigning raw eDNA sequencing reads to eukaryotic taxa or inferring their ecological roles presents significant challenges, primarily due to the poor representation of deep-sea organisms in reference databases like SILVA, PR2, or NCBI. These databases, built primarily from well-studied terrestrial or shallow-water species, lack comprehensive sequences for deep-sea eukaryotes, leading to misclassifications, unassigned reads, or underestimation of biodiversity.
-
-Traditional bioinformatic pipelines for eDNA analysis, such as those implemented in QIIME2, DADA2, or mothur, rely heavily on sequence alignment or mapping to these databases, which is inadequate for novel or divergent deep-sea taxa. This dependency limits the discovery of new species and hinders accurate biodiversity assessments, critical for conservation in rapidly changing deep-sea environments. The computational time required for processing eDNA data exacerbates these challenges, particularly given the limitations of database-dependent methods and the complexity of eDNA datasets.
-
-### Expected Solution
-
-To address the challenges of poor database representation and computational time in deep-sea eDNA analysis, we propose an AI-driven pipeline that uses deep learning and unsupervised learning to identify eukaryotic taxa and assess biodiversity directly from raw eDNA reads. The solution should be able to classify the sequences, annotate and estimate abundance. This solution minimizes reliance on reference databases, reduces computational time through optimized workflows, and enables the discovery of novel taxa and ecological insights in deep-sea ecosystems.
-
-## Getting Started
-
-To get started with ATLAS, you will need to set up a Conda environment and download the required reference databases.
-
-### 1. Environment Setup
-
-This project supports both GPU-accelerated and CPU-only workflows. Please follow the [Environment and Installation Guide](docs/02_Environment_and_Installation.md) for detailed, step-by-step instructions on setting up the correct environment for your system.
-
-### 2. Data Acquisition
-
-The ATLAS pipelines rely on large, public reference databases (e.g. SILVA
-for 16S) that are not included in this repository. You must download them
-manually and place them in `data/raw/`. See the [16S Pipeline Workflow](docs/03_Pipeline_16S_Workflow.md)
-for the expected input file for that marker.
-
-### 3. Training a Pipeline
-
-Once your environment is configured and the data is in place, you can train
-any of the four marker classifiers (16S, 18S, COI, ITS). Each pipeline
-consists of a two-step script-based workflow. For example, to train the 16S
-classifier:
-
-```bash
-# First, run the data preparation script
-python src/pipeline_16s/01_prepare_data.py
-
-# Then, run the model training script
-python src/pipeline_16s/02_train_model.py
+```
+FASTA ──► 6-mer profiles ──► route to marker (nearest class centroid)
+                                  │
+                  ┌───────────────┴───────────────┐
+                  ▼                               ▼
+      Filter: marker MLP (Keras)        below threshold
+      confidence ≥ calibrated cut-off        │
+                  │                          ▼
+                  │            Explorer: PCA ─► HDBSCAN ─► clusters
+                  │            nearest known genus, similarity, novelty flag
+                  ▼                          ▼
+          genus abundance  ───────►  diversity (units = genera + clusters)
+                                             │
+                                             ▼
+                              text / JSON / HTML report, web UI
 ```
 
-Repeat for `pipeline_18s`, `pipeline_coi`, and `pipeline_its` to train the
-remaining Filter models, and see `src/pipeline_explorer/` for the Doc2Vec +
-HDBSCAN pipeline used to cluster sequences none of the Filter models can
-classify.
+- **Features.** Each sequence becomes a 4,096-dimensional 6-mer profile,
+  counted with vectorised numpy (2-bit base codes, base-4 k-mer indices) and
+  L2-normalised, so profiles of different lengths are comparable and a dot
+  product is a cosine similarity.
+- **Filter.** One multilayer perceptron per marker (1024 and 512 ReLU units,
+  dropout 0.5, Adam at 1e-3, early stopping with patience 5), trained on a
+  70/15/15 stratified split. The confidence threshold is the lowest cut-off
+  at which validation predictions are at least 95% correct.
+- **Explorer.** Unclassified profiles are reduced with PCA and clustered with
+  HDBSCAN, which finds clusters of different densities and leaves outliers
+  unclustered rather than forcing them into a group. Each cluster is
+  described by its nearest known genus, the cosine similarity to it, and a
+  representative sequence (the member closest to the cluster centre) to
+  confirm with BLAST or phylogenetic placement.
+- **Novelty flag.** During training ATLAS records how similar known sequences
+  are to their own genus centroid. A cluster below the 5th percentile of that
+  distribution is more distant from every known genus than 95% of reference
+  sequences are from their own, and is reported as a putative novel lineage.
 
-### 4. Running an Analysis
-
-Once at least one marker's model artifacts exist under `models/`, analyze a
-FASTA file with the CLI:
+## Quick start
 
 ```bash
-python -m cli --input_fasta path/to/your/file.fasta
+git clone https://github.com/JampaniKomal/atlas && cd atlas
+pip install -e .
+atlas demo
 ```
 
-Or run it with no arguments for an interactive prompt. Add `--verbose` to
-see per-stage progress, and `--report-name <name>` to control the saved
-report's filename (reports are written to `reports/`).
+`atlas demo` builds a synthetic reference and a 600-read community that
+includes two genera absent from the reference, trains a model, analyses the
+sample and writes `atlas-demo/report.html`. It takes under a minute on a
+laptop CPU:
 
-For detailed workflow instructions for each pipeline, please refer to the
-documentation in the [docs](docs/) directory.
+```
+[  PART 2: EXPLORER RESULTS  ]
+| Unclassified: 87 reads -> 4 clusters, 0 unclustered
+|   16S-X1      27 reads  nearest GenusA1 (similarity 0.280)  PUTATIVE NOVEL LINEAGE
+...
+[  PART 3: BIODIVERSITY  ]
+| Observed units (taxa + clusters): 16    Chao1 estimate: 16.0
+| Shannon H': 2.491    Gini-Simpson: 0.8956    Pielou evenness: 0.8984
 
-## Documentation
+Against the known truth: 513/513 known reads classified correctly; 87/87 reads
+from absent genera left unclassified; 87 reads in clusters flagged as putative
+novel lineages.
+```
 
-The project includes documentation in the `docs/` directory:
+With real data:
 
-1. [Project Overview](docs/01_Project_Overview.md) - Scientific background and project goals
-2. [Environment and Installation Guide](docs/02_Environment_and_Installation.md) - Setup instructions
-3. [16S Pipeline Workflow](docs/03_Pipeline_16S_Workflow.md) - Step-by-step 16S (prokaryote) data preparation workflow
-4. [16S Development Log](docs/04_Development_Log_16S.md) - Strategic decisions and technical challenges, 16S
-5. [18S Development Log](docs/05_Development_Log_18S.md) - Strategic decisions and technical challenges, 18S (eukaryote)
-6. [COI Development Log](docs/06_Development_Log_COI.md) - Strategic decisions and technical challenges, COI (animalia)
-7. [ITS Development Log](docs/07_Development_Log_ITS.md) - Strategic decisions and technical challenges, ITS (fungi)
+```bash
+atlas train --marker 18S --reference pr2_version_5.1.1_SSU_taxo_long.fasta.gz --min-members 10 --max-per-class 20
+atlas analyze sample.fasta                  # text report, plus reports/<name>.html
+atlas analyze sample.fasta --threshold 0.9  # stricter: more reads go to the Explorer
+atlas analyze                               # asks for the file interactively
+atlas serve                                 # web interface on http://127.0.0.1:5000
+```
 
-Only the 16S pipeline has a dedicated step-by-step workflow doc; 18S/COI/ITS
-are documented as development logs (decisions and challenges) rather than
-workflow guides, since all four pipelines follow the same overall shape
-(prepare data -> train model) described in `src/pipeline_<marker>/`.
+Reference databases, parsers and training options for all four markers are in
+[docs/TRAINING.md](docs/TRAINING.md); installation (pip, conda, Docker, GPU)
+in [docs/INSTALL.md](docs/INSTALL.md).
 
-## Project Structure
+## Results on real reference databases
 
-- **`cli/`**: The interactive command-line entry point (`python -m cli`).
-- **`src/`**: Production Python scripts — `predict.py` (the master analysis
-  engine used by the CLI), and one `pipeline_<marker>/` folder per genetic
-  marker (16S, 18S, COI, ITS) plus `pipeline_explorer/` for the novel-taxa
-  clustering pipeline.
-- **`docs/`**: Project documentation and per-marker development logs.
-- **`others/`**: Standalone utility scripts (e.g. generating a small test
-  FASTA file from a full reference database).
-- **`data/`** and **`models/`**: Not included in the repo (gitignored —
-  reference databases and trained model artifacts are too large to commit).
-  Created locally when you download the reference data and run a pipeline's
-  training scripts.
+The held-out-genera benchmark removes 50 whole genera from the reference
+before training, then tests on sequences of the remaining genera and on every
+sequence of the removed ones, which the model has never seen. Genus level,
+6-mers, classes of 10 or more sequences capped at 20, on a 16-CPU container
+without a GPU. Details, the full threshold sweep and how to reproduce it are
+in [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-## Testing & Verification
+| | 16S, SILVA 138.2 | 18S, PR2 5.1.1 |
+|---|---|---|
+| Known genera | 2,427 | 2,302 |
+| Closed-set accuracy (macro-F1) | 92.1% (0.915) | 86.4% (0.845) |
+| Kept at the calibrated threshold, and precision of what is kept | 95.4% at 94.9% | 81.3% at 95.1% |
+| Reads from held-out genera refused by the Filter | 31% | 71% |
+| Known vs novel separation by confidence (AUROC) | 0.86 | 0.85 |
+| Explorer: clustered novel reads vs true genus (ARI, homogeneity) | 0.90, 0.96 | 0.84, 0.97 |
+| Held-out genera recovered as their own cluster | 25 of 50 | 40 of 50 |
+| Training time | 10 min, 35 epochs | 7 min, 27 epochs |
 
-Model artifacts (the trained `.keras` classifiers and Doc2Vec model) aren't
-included in the repo and require downloading large reference databases to
-train, so full end-to-end classification wasn't runnable in this pass.
-Instead, verified the pipeline logic directly against real, controlled
-inputs, which surfaced 3 real bugs:
+What this says: on genera it knows, the Filter is accurate, and what it keeps
+is about 95% correct, the precision its threshold is calibrated for. On genera it doesn't know, confidence alone
+is a weak detector, especially for 16S: two thirds of the reads from
+held-out bacterial genera were confidently assigned to a known genus. The
+reads that do reach the Explorer are grouped by their true genus with little
+mixing. A stricter threshold trades coverage for novelty detection: at 0.9,
+16S refuses 73% of novel reads and keeps 81% of known ones at 98.7%
+precision (`atlas analyze --threshold 0.9`, or train with
+`--target-precision 0.99`).
 
-- **The "Explorer" (novel taxa discovery) pipeline crashed on every
-  genuinely novel sequence.** `explorer_step_1_vectorize()` looked up
-  vectors via `doc2vec_model.dv[seq.id]`, which only works for sequence IDs
-  that were part of the Doc2Vec model's *training* corpus — copied from the
-  training script (`pipeline_explorer/01_vectorize_sequences.py`), where
-  that assumption is correct, into the inference-time code, where it isn't:
-  every sequence reaching this stage is by definition one the Filter models
-  couldn't classify, so its ID was never seen during training. Reproduced
-  with a real trained Doc2Vec model and a real `KeyError` on a novel ID,
-  then fixed by switching to `doc2vec_model.infer_vector()` (the correct
-  Doc2Vec API for embedding unseen documents) and re-verified the same
-  scenario now vectorizes, clusters, and reports correctly.
-- **`src/predict.py`'s own CLI entry point crashed immediately in
-  interactive mode** with `NameError: name 'ATLAS_ASCII' is not defined` —
-  the constant is defined in `cli/__main__.py` but `predict.py` has its own
-  duplicate `__main__` block that references it without defining it.
-  Fixed by defining it in `predict.py` too.
-- **A model-loading failure would crash instead of logging cleanly**:
-  `logging.error(..., file=sys.stderr)` — `file=` isn't a valid keyword for
-  the `logging` module (it's a `print()` kwarg) — so any real error loading
-  a model's artifacts raised a `TypeError` instead of the intended clean
-  error message. Fixed at both call sites.
+## Project layout
 
-Also fixed `others/create_test_fasta.py`, which had the original
-developer's own machine-specific absolute paths (`C:\Users\...\Music\atlas\...`)
-hardcoded — non-portable for anyone else running it. Now resolves paths
-relative to the project root like every other script in the repo.
+```
+atlas/
+  kmers.py       vectorised k-mer profiles
+  fasta.py       streaming FASTA reader (plain or gzip)
+  references.py  SILVA, PR2, UNITE and MIDORI2 header parsers
+  markers.py     per-marker defaults (16S, 18S, COI, ITS)
+  dataset.py     labelled training sets and stratified splits
+  model.py       Filter: Keras MLP, threshold calibration, metrics
+  explorer.py    Explorer: PCA + HDBSCAN, nearest-genus annotation, novelty flag
+  diversity.py   richness, Chao1, Shannon, Gini-Simpson, Pielou
+  analysis.py    routing, Filter, Explorer and diversity for one sample
+  report.py      text, JSON and HTML reports
+  server.py      `atlas serve` (Flask) for the web interface in web/index.html
+  evaluate.py    held-out-genera benchmark
+  synthetic.py   synthetic references and communities (demo and tests)
+  cli.py         the `atlas` command
+tests/           unit tests and an end-to-end test of train, analyse and serve
+docs/            installation, training, benchmark, and v1 history
+```
 
-## Known Limitations
+## History
 
-- `index.html` is a full web UI (file upload, live charts, results screen)
-  left over from an earlier architecture — it expects a `POST /run_analysis`
-  backend that was deliberately removed (`server.py`) in favor of the CLI.
-  It is not linked from anywhere (no GitHub Pages) and does not work as
-  committed; **the CLI (`python -m cli`) is the actual supported interface.**
-- The "Explorer" pipeline's clustering quality depends heavily on how well
-  the pre-trained Doc2Vec model generalizes to genuinely novel sequences via
-  `infer_vector()` — this is inherently approximate compared to vectors for
-  documents seen during training.
-- No automated test suite; verification here was done with standalone
-  scripts exercising the real pipeline functions with synthetic/controlled
-  data, not a committed `tests/` directory.
-- GPU support requires a specific CUDA Toolkit/cuDNN version pinned to
-  TensorFlow 2.10 (see the Environment and Installation Guide); newer GPU
-  drivers may need a different pinned combination.
+ATLAS was built in September 2025 for SIH 2025. Development went
+notebook-first: each marker's data preparation and training were worked out in
+Jupyter, then turned into scripts (16S from SILVA, 18S, COI with a hashed
+k-mer vectoriser, ITS for fungi), with a Doc2Vec + HDBSCAN "Explorer" for
+unclassified reads. The front end went through a web page with a Flask
+backend and an Electron desktop build before settling on a command-line tool.
+The development logs are in [docs/history](docs/history/).
+
+Version 2 (2026) turned the scripts into one installable package and command,
+replaced per-k-mer Python dictionaries with vectorised counting, calibrates
+the confidence threshold instead of fixing it at 0.8, clusters k-mer profiles
+directly (no second model, deterministic), adds diversity estimates and HTML
+reports, brings the original web interface back to life with `atlas serve`,
+and measures everything on real databases with a held-out-genera benchmark.
+
+## Limitations
+
+- ATLAS classifies near-full-length marker sequences best, because that is
+  what reference databases contain. Short amplicon reads (for example 16S
+  V4, about 250 bp) should be classified with a model trained on the same
+  region of the reference.
+- The Filter's confidence is a softmax probability, and a network is often
+  confident on inputs unlike anything it was trained on. In the benchmark it
+  refused only 31% (16S) and 71% (18S) of reads from genera it had never
+  seen at the default threshold; the rest were assigned to a known genus.
+  Raise the threshold when unknown taxa matter more than coverage.
+- The novelty flag is conservative: 3 of 29 (16S) and 3 of 54 (18S) Explorer
+  clusters of held-out genera were flagged, because most held-out genera
+  have close relatives in the reference. Treat unflagged clusters as
+  unassigned, not as known.
+- The novelty flag measures distance from the reference in k-mer space. It
+  points at sequences worth investigating; naming a new taxon needs
+  phylogenetics and expert review.
+- Genus-level labels are only as good as the reference taxonomy, and genera
+  with fewer than `--min-members` reference sequences can't be learnt.
+- Abundance is read counts, not organism counts; copy-number and PCR biases
+  are not corrected.
 
 ## Contributors
 
-- **Jampani Komal** — primary development (data pipelines, CLI, Filter and
-  Explorer pipelines).
-- **Rishu Tiwari** — model training improvements: reduced Adam learning
-  rate and increased EarlyStopping patience on the 16S/18S/ITS classifiers,
-  and rewrote COI's data preparation to use `HashingVectorizer` with a
-  generator-based k-mer workflow for better performance on large datasets.
+- **Jampani Komal**: data pipelines, Filter and Explorer, CLI, web interface,
+  and version 2.
+- **Rishu Tiwari**: model training improvements (the longer early-stopping
+  patience ATLAS still uses, and the lower Adam learning rate v1 trained
+  with) and the HashingVectorizer, generator-based k-mer pipeline for COI.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
+MIT. See [LICENSE](LICENSE). Reference databases have their own licences and
+citation requirements; follow them when you publish results.

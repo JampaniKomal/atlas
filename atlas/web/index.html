@@ -120,6 +120,9 @@ AAGCTT..."></textarea>
             <div class="flex flex-col md:flex-row justify-between items-center mb-6">
                 <h2 class="text-xl font-bold text-gray-100 mb-4 md:mb-0">Analysis Results</h2>
                 <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
+                    <a id="html-report-link" href="#" target="_blank" rel="noopener" class="pro-button px-4 py-2 rounded-md font-medium text-sm hidden">
+                        Open HTML Report
+                    </a>
                     <button id="download-report-btn" class="pro-button px-4 py-2 rounded-md font-medium text-sm">
                         Download Report
                     </button>
@@ -354,6 +357,13 @@ AAGCTT..."></textarea>
                 
                 if (response.ok && result.status === 'success') {
                     resultsContent.textContent = result.report_content;
+                    const htmlLink = document.getElementById('html-report-link');
+                    if (result.html_report) {
+                        htmlLink.href = result.html_report;
+                        htmlLink.classList.remove('hidden');
+                    } else {
+                        htmlLink.classList.add('hidden');
+                    }
                     if (result.classified_results) {
                         const chartData = Object.entries(result.classified_results).map(([key, value]) => ({ label: key, value: value }));
                         createCharts(chartData);

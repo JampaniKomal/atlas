@@ -65,3 +65,8 @@ reports/
 .DS_Store
 Thumbs.db
 node_modules/
+# Local runs
+atlas-demo/
+.pytest_cache/
+.ruff_cache/
+benchmark-data/

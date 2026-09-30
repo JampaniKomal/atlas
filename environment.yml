@@ -1,28 +1,11 @@
+# Conda environment for ATLAS. TensorFlow uses an NVIDIA GPU automatically on
+# Linux (and on Windows through WSL2) when one is available.
+#   conda env create -f environment.yml && conda activate atlas
 name: atlas
 channels:
   - conda-forge
-  - defaults
 dependencies:
-  # Core scientific stack
-  - python=3.10
-  - pandas
-  - numpy=1.24.3 # Pinning version for TF compatibility as per your docs
-  - scikit-learn
-  - biopython
-  - scipy
-  - tqdm
-
-  # --- NEW LIBRARIES ---
-  # For R&D and visualization
-  - jupyterlab
-  - matplotlib
-  - seaborn
-  # For sequence vectorization
-  - gensim
-  # For advanced clustering
-  - hdbscan
-
-  # TensorFlow via pip to control the version
+  - python=3.12
   - pip
   - pip:
-    - "tensorflow<2.11" # As specified in your docs for GPU support
+      - -e .[dev]
